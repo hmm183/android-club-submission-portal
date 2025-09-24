@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { db } from "../firebase";
-import { collection, onSnapshot, updateDoc, doc } from "firebase/firestore";
-import { FileText, Save, Users, ExternalLink, Download } from "lucide-react";
+import { collection, onSnapshot, updateDoc, doc, query, orderBy } from "firebase/firestore";
+import { Save, Users, ExternalLink, Download, Loader2 } from "lucide-react";
 
 const RATERS = ["Vrishank", "Raushan", "Priyanshu", "Vishwanath", "Niyati", "Balaji"];
 
@@ -12,6 +12,8 @@ export default function AdminDashboard() {
   const [ratingValues, setRatingValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
+  // FIX: State to track the saving status for each individual submission
+  const [savingStatus, setSavingStatus] = useState({});
 
   const getRegNo = (email) => {
     if (!email) return 'N/A';
@@ -32,9 +34,10 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "submissions"), (snapshot) => {
+    // FIX: Added explicit query and ordering
+    const q = query(collection(db, "submissions"), orderBy("submittedAt", "asc"));
+    const unsub = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => a.submittedAt?.toMillis() - b.submittedAt?.toMillis());
       setSubmissions(data);
 
       const initialRatings = {};
@@ -50,7 +53,8 @@ export default function AdminDashboard() {
     const unassigned = submissions.filter(s => !s.assignedRater);
 
     if (unassigned.length === 0) {
-      alert("No new submissions to assign.");
+      // FIX: Removed disruptive alert
+      console.log("No new submissions to assign.");
       setAssigning(false);
       return;
     }
@@ -68,7 +72,8 @@ export default function AdminDashboard() {
     });
 
     await Promise.all(promises);
-    alert(`${unassigned.length} new submission(s) have been assigned!`);
+    // FIX: Removed disruptive alert
+    console.log(`${unassigned.length} new submission(s) have been assigned!`);
     setAssigning(false);
   };
 
@@ -76,28 +81,44 @@ export default function AdminDashboard() {
     setRatingValues(prev => ({ ...prev, [id]: value }));
   };
 
+  // FIX: Updated save handler for better UX
   const handleRatingSave = async (id) => {
     const rating = ratingValues[id];
-    if (rating === "" || rating < 1 || rating > 10) {
-      return alert("Please enter a valid rating between 1 and 10.");
+    const originalRating = submissions.find(s => s.id === id)?.rating || "";
+    
+    // Don't do anything if rating is unchanged
+    if (String(rating) === String(originalRating)) {
+      return;
     }
+
+    if (rating === "" || rating < 1 || rating > 10) {
+      alert("Please enter a valid rating between 1 and 10.");
+      return;
+    }
+    
+    setSavingStatus(prev => ({ ...prev, [id]: true })); // Set saving state for this specific item
     
     const subDocRef = doc(db, "submissions", id);
     try {
       await updateDoc(subDocRef, { rating: Number(rating) });
-      alert("Rating saved successfully!");
+      // No alert needed, success is implied by the button resetting
     } catch (error) {
       console.error("Error saving rating: ", error);
-      alert("Failed to save rating.");
+      alert("Failed to save rating."); // Keep alert for errors
+    } finally {
+      setSavingStatus(prev => ({ ...prev, [id]: false })); // Reset saving state
     }
   };
 
-  const groupedByRater = submissions.reduce((acc, sub) => {
-    const rater = sub.assignedRater || "Unassigned";
-    if (!acc[rater]) acc[rater] = [];
-    acc[rater].push(sub);
-    return acc;
-  }, {});
+  // OPTIMIZATION: Memoize the grouping calculation to prevent re-running on every render
+  const groupedByRater = useMemo(() => {
+    return submissions.reduce((acc, sub) => {
+      const rater = sub.assignedRater || "Unassigned";
+      if (!acc[rater]) acc[rater] = [];
+      acc[rater].push(sub);
+      return acc;
+    }, {});
+  }, [submissions]);
   
   const displayOrder = ["Unassigned", ...RATERS.sort()];
 
@@ -133,35 +154,33 @@ export default function AdminDashboard() {
                   
                   return (
                     <div key={sub.id} className={`p-4 border rounded-lg flex flex-col md:flex-row justify-between items-center gap-4 ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
-                      <div className="flex-grow">
+                      <div className="flex-grow w-full md:w-auto">
                         <div className="flex items-center gap-3 mb-2">
                           <p className={`font-semibold text-lg ${themeClasses.textPrimary}`}>{sub.teamName} (Team #{sub.teamNumber})</p>
                           <span className={`px-2 py-1 text-xs font-mono rounded-md ${isFresher ? themeClasses.fresherBadge : themeClasses.badge}`}>
                             {regNo} {isFresher && ' (Fresher)'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 flex-wrap">
                            <a 
                              href={`https://docs.google.com/gview?url=${encodeURIComponent(sub.fileURL)}&embedded=true`} 
                              target="_blank" 
                              rel="noopener noreferrer" 
                              className={`flex items-center gap-2 text-sm font-medium transition-colors px-3 py-1 rounded-md ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} ${themeClasses.link}`}
                            >
-                            <ExternalLink size={14} />
-                            View Online
-                          </a>
+                             <ExternalLink size={14} /> View Online
+                           </a>
                           <a 
                             href={sub.fileURL} 
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className={`flex items-center gap-2 text-sm font-medium transition-colors ${themeClasses.textSecondary} hover:text-green-400`}
                           >
-                            <Download size={14} />
-                            {sub.fileName}
+                            <Download size={14} /> {sub.fileName}
                           </a>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 w-full md:w-auto">
                         <input
                           type="number"
                           min="1"
@@ -171,12 +190,17 @@ export default function AdminDashboard() {
                           onChange={(e) => handleRatingChange(sub.id, e.target.value)}
                           className={`w-24 px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-400/50 ${themeClasses.input}`}
                         />
+                        {/* FIX: Updated button with dynamic content and disabled state */}
                         <button
                           onClick={() => handleRatingSave(sub.id)}
-                          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-transform hover:scale-105"
+                          disabled={savingStatus[sub.id]}
+                          className="flex items-center justify-center w-28 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-all hover:scale-105 disabled:bg-gray-500 disabled:scale-100"
                         >
-                          <Save size={16}/>
-                          Save
+                          {savingStatus[sub.id] ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                             <><Save size={16} className="mr-2"/> Save</>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -190,4 +214,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-

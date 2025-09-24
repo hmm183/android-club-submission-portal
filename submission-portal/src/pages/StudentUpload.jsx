@@ -130,9 +130,13 @@ export default function StudentUpload() {
         submittedAt: serverTimestamp(),
       });
       
-      // Step 5: Send confirmation email
-      await axios.post(`${EMAIL_SERVER_URL}/send-confirmation`, {
+      // Step 5: Send confirmation email (NON-BLOCKING)
+      // FIX: Removed 'await' to prevent the UI from hanging if the email server is slow.
+      axios.post(`${EMAIL_SERVER_URL}/send-confirmation`, {
         teamName, leaderEmail,
+      }).catch(err => {
+        // Optional: Log email errors for debugging, but don't bother the user.
+        console.error("Failed to send confirmation email:", err);
       });
 
       setStatus("success");
@@ -263,4 +267,3 @@ export default function StudentUpload() {
     </>
   );
 }
-
