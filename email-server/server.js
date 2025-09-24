@@ -1,67 +1,70 @@
 require('dotenv').config();
 const express = require('express');
-const nodemailer = require('nodemailer');
+const nodemailer =require('nodemailer');
 const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Middleware to parse JSON bodies
+// Middleware
 app.use(express.json());
-
-// CORS configuration to allow requests ONLY from your frontend
 const corsOptions = {
   origin: process.env.CORS_ORIGIN,
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
 
-// Health check route to see if the server is running
+// Health check route
 app.get('/', (req, res) => {
   res.status(200).send('Email server is running.');
 });
 
-// The API endpoint that receives data from your frontend and sends the email
-app.post('/send-confirmation', async (req, res) => {
+// **THE FIX:** This route now responds immediately and sends the email in the background.
+app.post('/send-confirmation', (req, res) => {
   const { teamName, leaderEmail } = req.body;
 
-  // Basic validation
   if (!teamName || !leaderEmail) {
     return res.status(400).json({ success: false, message: 'Missing teamName or leaderEmail.' });
   }
 
-  // **THE FIX:** The transporter is created inside the handler.
-  // This creates a fresh connection for every request, preventing timeouts.
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  // Step 1: Send an immediate success response to the frontend.
+  res.status(200).json({ success: true, message: 'Submission received. A confirmation email is being sent.' });
 
-  const mailOptions = {
-    from: `Organizing Committee <${process.env.EMAIL_USER}>`,
-    to: leaderEmail,
-    subject: '✅ Submission Received - September Sprint',
-    html: `
-      <h2>Thank You For Your Submission!</h2>
-      <p>This is a confirmation that your team, <strong>${teamName}</strong>, has successfully submitted its project for the <b>September Sprint</b>.</p>
-      <p>Our raters will review it shortly. Good luck!</p>
-      <br/>
-      <p>- The ANDROID CLUB</p>
-    `,
+  // Step 2: Perform the slow email-sending task in the background.
+  // We define an async function to do the work.
+  const sendEmail = async () => {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+
+      const mailOptions = {
+        from: `Organizing Committee <${process.env.EMAIL_USER}>`,
+        to: leaderEmail,
+        subject: '✅ Submission Received - September Sprint',
+        html: `
+          <h2>Thank You For Your Submission!</h2>
+          <p>This is a confirmation that your team, <strong>${teamName}</strong>, has successfully submitted its project for the <b>September Sprint</b>.</p>
+          <p>Our raters will review it shortly. Good luck!</p>
+          <br/>
+          <p>- The ANDROID CLUB</p>
+        `,
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`Background confirmation email sent to ${leaderEmail}`);
+
+    } catch (error) {
+      console.error('Error sending background email:', error);
+    }
   };
 
-  try {
-    // Attempt to send the email
-    await transporter.sendMail(mailOptions);
-    console.log(`Confirmation email sent to ${leaderEmail}`);
-    res.status(200).json({ success: true, message: 'Confirmation email sent successfully.' });
-  } catch (error) {
-    console.error('Error sending email:', error);
-    res.status(500).json({ success: false, message: 'Failed to send confirmation email.' });
-  }
+  // Call the function to run it without waiting for it to finish.
+  sendEmail();
 });
 
 app.listen(port, () => {
