@@ -16,8 +16,6 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// NOTE: The nodemailer transporter has been moved from here...
-
 // Health check route to see if the server is running
 app.get('/', (req, res) => {
   res.status(200).send('Email server is running.');
@@ -32,7 +30,8 @@ app.post('/send-confirmation', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing teamName or leaderEmail.' });
   }
 
-  // ...into here. This creates a fresh connection for every request.
+  // **THE FIX:** The transporter is created inside the handler.
+  // This creates a fresh connection for every request, preventing timeouts.
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
