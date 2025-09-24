@@ -38,19 +38,31 @@ export default function StudentUpload() {
   };
 
   const themeClasses = {
-    bg: isDark
-      ? "bg-gradient-to-br from-gray-900 via-black to-gray-900"
-      : "bg-gradient-to-br from-gray-50 via-white to-gray-100",
+    bg: isDark ? "bg-gradient-to-br from-gray-900 via-black to-gray-900" : "bg-gradient-to-br from-gray-50 via-white to-gray-100",
     text: isDark ? "text-white" : "text-gray-900",
     textMuted: isDark ? "text-gray-400" : "text-gray-500",
-    card: isDark
-      ? "bg-black/90 backdrop-blur-lg border-gray-800"
-      : "bg-white/80 backdrop-blur-lg border-gray-200",
-    input: isDark
-      ? 'bg-gray-800/50 border-gray-700 text-white placeholder-gray-400'
-      : 'bg-gray-50/50 border-gray-300 text-gray-900 placeholder-gray-500',
+    card: isDark ? "bg-black/90 backdrop-blur-lg border-gray-800" : "bg-white/80 backdrop-blur-lg border-gray-200",
+    input: isDark ? 'bg-gray-800/50 border-gray-700 text-white placeholder-gray-400' : 'bg-gray-50/50 border-gray-300 text-gray-900 placeholder-gray-500',
   };
   // --- End of Themeing Logic ---
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      // 20MB in bytes (1024 * 1024 * 20)
+      const maxSizeInBytes = 20971520;
+      if (selectedFile.size > maxSizeInBytes) {
+        setStatus("error");
+        setMessage("File is too large. Maximum size is 20MB.");
+        setFile(null);
+        e.target.value = ""; // Reset the file input visually
+      } else {
+        setFile(selectedFile);
+        setStatus("idle"); // Clear any previous error messages
+        setMessage("");
+      }
+    }
+  };
 
   const handleSubmit = async () => {
     if (!teamName || !teamNumber || !file) {
@@ -101,9 +113,10 @@ export default function StudentUpload() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("upload_preset", process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET);
+      formData.append("resource_type", "auto"); // Fix for handling PDFs/PPTs
 
       const res = await axios.post(
-        `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/upload`,
+        `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/auto/upload`,
         formData
       );
       const fileURL = res.data.secure_url;
@@ -221,7 +234,7 @@ export default function StudentUpload() {
                 id="file-input"
                 type="file"
                 accept=".pdf,.ppt,.pptx"
-                onChange={(e) => setFile(e.target.files[0])}
+                onChange={handleFileChange}
                 className="hidden"
               />
             </div>
@@ -250,3 +263,4 @@ export default function StudentUpload() {
     </>
   );
 }
+

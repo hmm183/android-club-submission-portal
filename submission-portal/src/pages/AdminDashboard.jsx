@@ -1,48 +1,47 @@
 import { useEffect, useState } from "react";
-import { db } from "../firebase";
-import { collection, updateDoc, doc, onSnapshot } from "firebase/firestore";
 import { useOutletContext } from "react-router-dom";
-import { Users, FileText, Save, Loader2, UserCheck } from "lucide-react";
+import { db } from "../firebase";
+import { collection, onSnapshot, updateDoc, doc } from "firebase/firestore";
+import { FileText, Save, Users, ExternalLink, Download } from "lucide-react";
 
 const RATERS = ["Vrishank", "Raushan", "Priyanshu", "Vishwanath", "Niyati", "Balaji"];
 
 export default function AdminDashboard() {
   const { isDark } = useOutletContext();
-
   const [submissions, setSubmissions] = useState([]);
   const [ratingValues, setRatingValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
-  const [savingId, setSavingId] = useState(null);
+
+  const getRegNo = (email) => {
+    if (!email) return 'N/A';
+    const match = email.match(/\.(.*?)@/);
+    return match && match[1] ? match[1].toUpperCase() : 'Invalid Email';
+  };
 
   const themeClasses = {
-    text: isDark ? "text-white" : "text-gray-900",
-    textSecondary: isDark ? "text-gray-300" : "text-gray-600",
-    textMuted: isDark ? "text-gray-400" : "text-gray-500",
-    card: isDark
-      ? "bg-black/80 backdrop-blur-lg border-gray-800"
-      : "bg-white/80 backdrop-blur-lg border-gray-200",
-    input: isDark
-      ? 'bg-gray-800/50 border-gray-700 text-white placeholder-gray-400'
-      : 'bg-gray-50/50 border-gray-300 text-gray-900 placeholder-gray-500'
+    bg: isDark ? "bg-transparent" : "bg-gray-50",
+    card: isDark ? "bg-gray-900/50 border-gray-700" : "bg-white border-gray-200",
+    textHeader: isDark ? "text-green-400" : "text-indigo-600",
+    textPrimary: isDark ? "text-white" : "text-gray-800",
+    textSecondary: isDark ? "text-gray-400" : "text-gray-500",
+    input: isDark ? "bg-gray-800 border-gray-600 text-white" : "bg-white border-gray-300 text-black",
+    link: isDark ? "text-green-400 hover:text-green-300" : "text-indigo-600 hover:text-indigo-500",
+    badge: isDark ? 'bg-gray-700 text-green-300' : 'bg-gray-200 text-indigo-700',
+    fresherBadge: isDark ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' : 'bg-yellow-100 text-yellow-800 border border-yellow-300',
   };
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "submissions"), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       data.sort((a, b) => a.submittedAt?.toMillis() - b.submittedAt?.toMillis());
-      
       setSubmissions(data);
 
       const initialRatings = {};
-      data.forEach(sub => {
-        initialRatings[sub.id] = sub.rating || "";
-      });
+      data.forEach(sub => { initialRatings[sub.id] = sub.rating || ""; });
       setRatingValues(initialRatings);
-      
       setLoading(false);
     });
-
     return () => unsub();
   }, []);
 
@@ -61,12 +60,10 @@ export default function AdminDashboard() {
         return acc;
     }, {});
     
-    RATERS.sort((a, b) => counts[a] - counts[b]);
+    const sortedRaters = [...RATERS].sort((a, b) => counts[a] - counts[b]);
     
-    let raterIndex = 0;
-    const promises = unassigned.map(sub => {
-      const rater = RATERS[raterIndex];
-      raterIndex = (raterIndex + 1) % RATERS.length;
+    const promises = unassigned.map((sub, index) => {
+      const rater = sortedRaters[index % sortedRaters.length];
       return updateDoc(doc(db, "submissions", sub.id), { assignedRater: rater });
     });
 
@@ -80,21 +77,18 @@ export default function AdminDashboard() {
   };
 
   const handleRatingSave = async (id) => {
-    setSavingId(id);
     const rating = ratingValues[id];
-    if (!rating || rating < 1 || rating > 10) {
-      setSavingId(null);
+    if (rating === "" || rating < 1 || rating > 10) {
       return alert("Please enter a valid rating between 1 and 10.");
     }
     
     const subDocRef = doc(db, "submissions", id);
     try {
       await updateDoc(subDocRef, { rating: Number(rating) });
+      alert("Rating saved successfully!");
     } catch (error) {
       console.error("Error saving rating: ", error);
       alert("Failed to save rating.");
-    } finally {
-      setSavingId(null);
     }
   };
 
@@ -105,66 +99,69 @@ export default function AdminDashboard() {
     return acc;
   }, {});
   
-  const displayOrder = ["Unassigned", ...RATERS];
+  const displayOrder = ["Unassigned", ...RATERS.sort()];
 
   if (loading) {
-    return (
-      <div className={`flex justify-center items-center h-96 ${themeClasses.textSecondary}`}>
-        <Loader2 className="w-8 h-8 animate-spin mr-3" />
-        Loading Dashboard...
-      </div>
-    );
+    return <div className={`text-center p-10 font-semibold text-lg ${themeClasses.textPrimary}`}>Loading Dashboard...</div>;
   }
 
   return (
-    <div className="p-4 md:p-8">
+    <div className={`p-6 md:p-10 min-h-screen ${themeClasses.bg}`}>
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-center mb-8">
-          <h1 className={`text-4xl font-bold ${themeClasses.text}`}>Submissions Dashboard</h1>
+          <h1 className={`text-4xl font-bold ${themeClasses.textPrimary}`}>Submissions Dashboard</h1>
           <button
             onClick={assignRatings}
             disabled={assigning}
-            className="group relative mt-4 md:mt-0 w-full md:w-auto px-6 py-3 bg-gradient-to-r from-green-400 to-green-500 text-gray-900 rounded-xl font-semibold text-lg transition-all duration-300 hover:scale-105 shadow-lg shadow-green-500/30 hover:shadow-green-500/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            className="mt-4 md:mt-0 flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-lg shadow-lg shadow-green-500/30 hover:scale-105 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-green-400 to-green-500 rounded-xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity duration-300"></div>
-            <span className="relative z-10 flex items-center justify-center gap-2">
-              {assigning ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin"/>
-                  Assigning...
-                </>
-              ) : (
-                <>
-                  <Users className="w-5 h-5"/>
-                  {`Assign New (${groupedByRater["Unassigned"]?.length || 0})`}
-                </>
-              )}
-            </span>
+            {assigning ? "Assigning..." : `Assign New (${groupedByRater["Unassigned"]?.length || 0})`}
           </button>
         </div>
 
         <div className="space-y-8">
           {displayOrder.map(rater => groupedByRater[rater] && (
-            <div key={rater} className={`relative p-6 ${themeClasses.card} rounded-3xl border shadow-2xl animate-slide-up`}>
-              <div className="absolute inset-0 bg-gradient-to-br from-green-400/5 to-green-500/5 rounded-3xl"></div>
-              <h2 className={`text-2xl font-bold mb-4 flex items-center gap-3 ${themeClasses.text}`}>
-                <UserCheck className="text-green-400"/>
+            <div key={rater} className={`p-6 rounded-2xl shadow-lg border ${themeClasses.card}`}>
+              <h2 className={`text-2xl font-bold mb-4 flex items-center gap-3 ${themeClasses.textHeader}`}>
+                <Users />
                 {rater}'s Submissions ({groupedByRater[rater].length})
               </h2>
-              {groupedByRater[rater].length === 0 ? (
-                <p className={`${themeClasses.textMuted}`}>No submissions found.</p>
-              ) : (
-                <div className="space-y-4">
-                  {groupedByRater[rater].map(sub => (
-                    <div key={sub.id} className={`p-4 border ${isDark ? 'border-gray-800' : 'border-gray-200'} rounded-xl flex flex-col md:flex-row justify-between items-center gap-4`}>
+              <div className="space-y-4">
+                {groupedByRater[rater].map(sub => {
+                  const regNo = getRegNo(sub.leaderEmail);
+                  const isFresher = regNo.startsWith('25');
+                  
+                  return (
+                    <div key={sub.id} className={`p-4 border rounded-lg flex flex-col md:flex-row justify-between items-center gap-4 ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                       <div className="flex-grow">
-                        <p className={`font-semibold text-lg ${themeClasses.text}`}>{sub.teamName} (Team #{sub.teamNumber})</p>
-                        <a href={sub.fileURL} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline flex items-center gap-2 text-sm">
-                          <FileText size={16}/>
-                          View Submission: {sub.fileName}
-                        </a>
+                        <div className="flex items-center gap-3 mb-2">
+                          <p className={`font-semibold text-lg ${themeClasses.textPrimary}`}>{sub.teamName} (Team #{sub.teamNumber})</p>
+                          <span className={`px-2 py-1 text-xs font-mono rounded-md ${isFresher ? themeClasses.fresherBadge : themeClasses.badge}`}>
+                            {regNo} {isFresher && ' (Fresher)'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                           <a 
+                             href={`https://docs.google.com/gview?url=${encodeURIComponent(sub.fileURL)}&embedded=true`} 
+                             target="_blank" 
+                             rel="noopener noreferrer" 
+                             className={`flex items-center gap-2 text-sm font-medium transition-colors px-3 py-1 rounded-md ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} ${themeClasses.link}`}
+                           >
+                            <ExternalLink size={14} />
+                            View Online
+                          </a>
+                          <a 
+                            href={sub.fileURL} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className={`flex items-center gap-2 text-sm font-medium transition-colors ${themeClasses.textSecondary} hover:text-green-400`}
+                          >
+                            <Download size={14} />
+                            {sub.fileName}
+                          </a>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <input
                           type="number"
                           min="1"
@@ -172,20 +169,20 @@ export default function AdminDashboard() {
                           placeholder="1-10"
                           value={ratingValues[sub.id] || ""}
                           onChange={(e) => handleRatingChange(sub.id, e.target.value)}
-                          className={`w-24 px-3 py-2 ${themeClasses.input} border rounded-xl focus:ring-4 focus:ring-green-400/30 focus:border-green-400 transition-all duration-300 backdrop-blur-sm`}
+                          className={`w-24 px-3 py-2 border rounded-md focus:ring-2 focus:ring-green-400/50 ${themeClasses.input}`}
                         />
                         <button
                           onClick={() => handleRatingSave(sub.id)}
-                          disabled={savingId === sub.id}
-                          className="w-24 bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 transition flex items-center justify-center font-semibold disabled:bg-green-800"
+                          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-transform hover:scale-105"
                         >
-                          {savingId === sub.id ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save size={16} className="mr-1.5"/> Save</>}
+                          <Save size={16}/>
+                          Save
                         </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
@@ -193,3 +190,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
