@@ -113,10 +113,11 @@ export default function StudentUpload() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("upload_preset", process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET);
-      formData.append("resource_type", "auto"); // Fix for handling PDFs/PPTs
+      // formData.append("resource_type", "auto"); // This line is not needed when using a specific endpoint like /raw/upload
 
+      // FIX: Changed the endpoint from `/auto/upload` to `/raw/upload`
       const res = await axios.post(
-        `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/auto/upload`,
+        `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/raw/upload`,
         formData
       );
       const fileURL = res.data.secure_url;
@@ -131,11 +132,9 @@ export default function StudentUpload() {
       });
       
       // Step 5: Send confirmation email (NON-BLOCKING)
-      // FIX: Removed 'await' to prevent the UI from hanging if the email server is slow.
       axios.post(`${EMAIL_SERVER_URL}/send-confirmation`, {
         teamName, leaderEmail,
       }).catch(err => {
-        // Optional: Log email errors for debugging, but don't bother the user.
         console.error("Failed to send confirmation email:", err);
       });
 
@@ -144,7 +143,9 @@ export default function StudentUpload() {
       setTeamName("");
       setTeamNumber("");
       setFile(null);
-      document.getElementById('file-input').value = "";
+      if (document.getElementById('file-input')) {
+        document.getElementById('file-input').value = "";
+      }
     } catch (error) {
       console.error(error);
       setStatus("error");
