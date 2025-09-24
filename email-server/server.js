@@ -16,14 +16,7 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Nodemailer transporter using your credentials from the .env file
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// NOTE: The nodemailer transporter has been moved from here...
 
 // Health check route to see if the server is running
 app.get('/', (req, res) => {
@@ -38,6 +31,15 @@ app.post('/send-confirmation', async (req, res) => {
   if (!teamName || !leaderEmail) {
     return res.status(400).json({ success: false, message: 'Missing teamName or leaderEmail.' });
   }
+
+  // ...into here. This creates a fresh connection for every request.
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
 
   const mailOptions = {
     from: `Organizing Committee <${process.env.EMAIL_USER}>`,
