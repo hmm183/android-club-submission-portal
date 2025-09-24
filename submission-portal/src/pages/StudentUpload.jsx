@@ -132,9 +132,10 @@ export default function StudentUpload() {
       });
       
       // Step 5: Send confirmation email (NON-BLOCKING)
-      axios.post(`${EMAIL_SERVER_URL}/send-confirmation`, {
+      await axios.post(`${EMAIL_SERVER_URL}/send-confirmation`, {
         teamName, leaderEmail,
       }).catch(err => {
+        // The .catch is still good to have for logging errors
         console.error("Failed to send confirmation email:", err);
       });
 
